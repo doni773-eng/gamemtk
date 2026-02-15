@@ -39,6 +39,13 @@ canvas{
 <div id="score">Skor: 0</div>
 
 <canvas id="game" width="400" height="400"></canvas>
+  
+  <div id="confirmBox" style="display:none; margin-top:10px;">
+  <p id="confirmText"></p>
+  <button onclick="confirmYes()">YA</button>
+  <button onclick="confirmNo()">TIDAK</button>
+</div>
+
 
 <div class="controls">
 <button onclick="move(0,-1)">⬆️</button><br>
@@ -48,6 +55,9 @@ canvas{
 </div>
 
 <script>
+  let selectedAnswer = null;
+let waitingConfirm = false;
+
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
@@ -134,18 +144,19 @@ player.x=nx;
 player.y=ny;
 
 answers.forEach(a=>{
-if(player.x===a.x && player.y===a.y){
-if(a.val===current.a){
-score++;
-document.getElementById("score").innerText="Skor: "+score;
-alert("Benar!");
-newQuestion();
-}else{
-alert("Salah!");
-player={x:1,y:1};
-}
+if(player.x===a.x && player.y===a.y && !waitingConfirm){
+
+waitingConfirm = true;
+selectedAnswer = a;
+
+document.getElementById("confirmText").innerText =
+"Pilih jawaban ini: " + a.val + " ?";
+
+document.getElementById("confirmBox").style.display = "block";
 }
 });
+
+
 
 draw();
 }
@@ -157,9 +168,35 @@ if(e.key==="ArrowDown") move(0,1);
 if(e.key==="ArrowLeft") move(-1,0);
 if(e.key==="ArrowRight") move(1,0);
 });
+  function confirmYes(){
+
+document.getElementById("confirmBox").style.display = "none";
+waitingConfirm = false;
+
+if(selectedAnswer.val === current.a){
+score++;
+document.getElementById("score").innerText="Skor: "+score;
+alert("✅ Jawaban Benar!");
+newQuestion();
+}else{
+alert("❌ Jawaban Salah! Kembali ke awal.");
+player={x:1,y:1};
+draw();
+}
+
+selectedAnswer = null;
+}
+
+function confirmNo(){
+document.getElementById("confirmBox").style.display = "none";
+waitingConfirm = false;
+selectedAnswer = null;
+}
+
 
 newQuestion();
 </script>
+  
 
 </body>
 </html>

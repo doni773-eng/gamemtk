@@ -3,51 +3,36 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Math Maze</title>
-
+<title>Math Maze Adventure</title>
 <style>
-body{
-    margin:0;
-    font-family:Arial;
-    text-align:center;
-    background:#f4f6f8;
-}
-
-h2{margin:10px;}
-
-canvas{
-    background:white;
-    border:4px solid #333;
-}
-
-#score{
-    margin-bottom:10px;
-    font-size:18px;
-}
-
-.controls button{
-    font-size:18px;
-    margin:5px;
-    padding:8px 12px;
-}
+body{margin:0;font-family:Arial;text-align:center;background:#f4f6f8}
+h2{margin:10px}
+canvas{background:white;border:4px solid #333}
+#ui{margin:10px;font-size:18px}
+button{font-size:18px;margin:5px;padding:8px 12px}
+#confirmBox{display:none;margin-top:10px}
 </style>
 </head>
 
 <body>
+<h2 id="question">Memuat...</h2>
 
-<h2 id="question">Memuat soal...</h2>
-<div id="score">Skor: 0</div>
-
-<canvas id="game" width="400" height="400"></canvas>
-  
-  <div id="confirmBox" style="display:none; margin-top:10px;">
-  <p id="confirmText"></p>
-  <button onclick="confirmYes()">YA</button>
-  <button onclick="confirmNo()">TIDAK</button>
+<div id="ui">
+Level: <span id="level">1</span> |
+⭐: <span id="star">0</span>/5 |
+⏱️: <span id="time">30</span> |
+Skor: <span id="score">0</span>
 </div>
 
+<canvas id="game" width="400" height="400"></canvas>
 
-<div class="controls">
+<div id="confirmBox">
+<p id="confirmText"></p>
+<button onclick="confirmYes()">YA</button>
+<button onclick="confirmNo()">TIDAK</button>
+</div>
+
+<div>
 <button onclick="move(0,-1)">⬆️</button><br>
 <button onclick="move(-1,0)">⬅️</button>
 <button onclick="move(1,0)">➡️</button><br>
@@ -55,148 +40,287 @@ canvas{
 </div>
 
 <script>
-  let selectedAnswer = null;
-let waitingConfirm = false;
-
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-
 const tile = 40;
 
-// 1 = tembok, 0 = jalan
-const maze = [
-[1,1,1,1,1,1,1,1,1,1],
-[1,0,0,0,1,0,0,0,0,1],
-[1,0,1,0,1,0,1,1,0,1],
-[1,0,1,0,0,0,0,1,0,1],
-[1,0,1,1,1,1,0,1,0,1],
-[1,0,0,0,0,1,0,1,0,1],
-[1,1,1,1,0,1,0,1,0,1],
-[1,0,0,1,0,0,0,1,0,1],
-[1,0,0,0,0,1,0,0,0,1],
-[1,1,1,1,1,1,1,1,1,1]
-];
+let level=1, star=0, score=0, timeLeft=200;
+let player={x:1,y:1};
+let enemy={x:8,y:8};
 
-let player = {x:1,y:1};
-let score = 0;
+let hasMoved = false;
+let invincible = false;
+let blink = false;
 
-const questions = [
-{q:"1/2 + 1/4 =", a:"3/4", opt:["1/4","3/4","2/4","1"]},
-{q:"0.5 + 0.25 =", a:"0.75", opt:["0.5","0.75","1","0.25"]},
-{q:"25% + 25% =", a:"50%", opt:["25%","50%","75%","100%"]},
-{q:"3 + 7 =", a:"10", opt:["9","10","11","8"]},
-{q:"1/3 + 1/3 =", a:"2/3", opt:["1/3","2/3","3/3","1/6"]}
-];
+let maze=[], answers=[], current, selectedAnswer=null;
 
-let current;
-let answers=[];
+/* ===== TIMER ===== */
+setInterval(()=>{
+  timeLeft--;
+  document.getElementById("time").innerText=timeLeft;
+  if(timeLeft<=0){
+    alert("Waktu habis!");
+    newQuestion();
+  }
+},1000);
 
+/* ===== EFEK BERKEDIP ===== */
+setInterval(()=>{
+  blink = invincible ? !blink : false;
+  draw();
+},150);
+
+/* ===== MUSUH ===== */
+setInterval(()=>{
+  let dirs=[[1,0],[-1,0],[0,1],[0,-1]];
+  dirs.sort(()=>Math.random()-0.5);
+
+  for(let d of dirs){
+    let nx=enemy.x+d[0];
+    let ny=enemy.y+d[1];
+    if(ny>=0 && ny<10 && nx>=0 && nx<10 && maze[ny][nx]===0){
+      enemy.x=nx;
+      enemy.y=ny;
+      break;
+    }
+  }
+  checkEnemyHit();
+  draw();
+},700);
+
+/* ===== CEK TABRAKAN MUSUH ===== */
+function checkEnemyHit(){
+  if(!hasMoved) return;
+  if(invincible) return;
+  if(player.x===enemy.x && player.y===enemy.y){
+    alert("Kena musuh!");
+    player={x:1,y:1};
+    invincible = true;
+    hasMoved = false;
+    setTimeout(()=>{ invincible = false; },2000);
+  }
+}
+
+/* ===== SPAWN ENEMY ===== */
+function spawnEnemy(){
+  let pos;
+  do{
+    pos = getRandomPath();
+  }while(pos.x===player.x && pos.y===player.y);
+  enemy = {x:pos.x, y:pos.y};
+}
+
+/* ===== GENERATE MAZE SEDERHANA ===== */
+function generateMaze(){
+  maze = Array.from({length:10},()=>Array(10).fill(1));
+  function carve(x,y){
+    let dirs=[[0,-2],[2,0],[0,2],[-2,0]].sort(()=>Math.random()-0.5);
+    dirs.forEach(d=>{
+      let nx=x+d[0], ny=y+d[1];
+      if(ny>0 && ny<9 && nx>0 && nx<9 && maze[ny][nx]===1){
+        maze[ny][nx]=0;
+        maze[y+d[1]/2][x+d[0]/2]=0;
+        carve(nx,ny);
+      }
+    });
+  }
+  maze[1][1]=0;
+  carve(1,1);
+  for(let i=0;i<15;i++){
+    let x=Math.floor(Math.random()*8)+1;
+    let y=Math.floor(Math.random()*8)+1;
+    maze[y][x]=0;
+  }
+}
+
+/* ===== RANDOM TERM & OPERATOR ===== */
+function randomTerm(){
+  let type = Math.floor(Math.random()*4);
+  let value, text;
+  if(type===0){ let n=Math.floor(Math.random()*5)+1; value=n; text=n.toString(); }
+  if(type===1){ let n=(Math.random()*2+0.5).toFixed(2); value=parseFloat(n); text=n.replace(".",","); }
+  if(type===2){ let a=Math.floor(Math.random()*3)+1; let b=Math.floor(Math.random()*3)+2; value=a/b; text=`${a}/${b}`; }
+  if(type===3){ let p=Math.floor(Math.random()*80)+20; value=p/100; text=`${p}%`; }
+  return {value,text};
+}
+function randomOperator(){ let ops=["+","-","×"]; return ops[Math.floor(Math.random()*ops.length)]; }
+
+/* ===== GENERATE QUESTION ===== */
+function generateQuestion(){
+  let terms=[randomTerm(),randomTerm(),randomTerm(),randomTerm()];
+  let ops=[randomOperator(),randomOperator(),randomOperator()];
+  let expressionText=`${terms[0].text} ${ops[0]} ${terms[1].text} ${ops[1]} ${terms[2].text} ${ops[2]} ${terms[3].text}`;
+  document.getElementById("question").innerText = expressionText + " = ?";
+
+  // HITUNG RESULT
+  let values = terms.map(t=>t.value);
+  let operators = [...ops];
+  for(let i=0;i<operators.length;i++){
+    if(operators[i]==="×"){
+      values[i] = values[i]*values[i+1];
+      values.splice(i+1,1);
+      operators.splice(i,1);
+      i--;
+    }
+  }
+  let result = values[0];
+  for(let i=0;i<operators.length;i++){
+    if(operators[i]==="+") result+=values[i+1];
+    else result-=values[i+1];
+  }
+  result=parseFloat(result.toFixed(2));
+
+  current={q:expressionText+" = ?", a:result.toString()};
+
+  // POSISI JAWABAN
+  answers=[];
+  let correctPos=getRandomPath();
+  answers.push({x:correctPos.x,y:correctPos.y,val:current.a});
+  for(let i=0;i<3;i++){
+    let wrong;
+    do{ wrong=(result + (Math.random()*4-2)).toFixed(2); }while(wrong===current.a);
+    let pos=getRandomPath();
+    answers.push({x:pos.x,y:pos.y,val:wrong});
+  }
+}
+
+/* ===== RANDOM PATH ===== */
+function getRandomPath(){
+  let x,y;
+  do{
+    x=Math.floor(Math.random()*10);
+    y=Math.floor(Math.random()*10);
+  }while(maze[y][x]===1 || (x===1 && y===1));
+  return {x,y};
+}
+
+/* ===== SOAL BARU ===== */
 function newQuestion(){
-current = questions[Math.floor(Math.random()*questions.length)];
-document.getElementById("question").innerText = current.q;
-
-answers = [
-{x:8,y:1,val:current.opt[0]},
-{x:8,y:3,val:current.opt[1]},
-{x:8,y:5,val:current.opt[2]},
-{x:8,y:7,val:current.opt[3]}
-];
-
-player={x:1,y:1};
-draw();
+  generateMaze();
+  generateQuestion();
+  player={x:1,y:1};
+  hasMoved=false;
+  invincible=false;
+  spawnEnemy();
+  timeLeft=200;
+  draw();
+  updateUI();
 }
 
+/* ===== GAMBAR ===== */
 function draw(){
-ctx.clearRect(0,0,400,400);
+  ctx.clearRect(0,0,400,400);
 
-// maze
-for(let y=0;y<10;y++){
-for(let x=0;x<10;x++){
-if(maze[y][x]===1){
-ctx.fillStyle="#333";
-ctx.fillRect(x*tile,y*tile,tile,tile);
-}else{
-ctx.strokeRect(x*tile,y*tile,tile,tile);
-}
-}
+  // Maze
+  for(let y=0;y<10;y++){
+    for(let x=0;x<10;x++){
+      if(maze[y][x]===1){
+        ctx.fillStyle="#333";
+        ctx.fillRect(x*tile,y*tile,tile,tile);
+      }else{
+        ctx.strokeRect(x*tile,y*tile,tile,tile);
+      }
+    }
+  }
+
+  // Jawaban
+  ctx.font="16px Arial";
+  ctx.textAlign="center";
+  ctx.textBaseline="middle";
+  answers.forEach(a=>{
+    ctx.fillStyle="green";
+    ctx.fillRect(a.x*tile,a.y*tile,tile,tile);
+    ctx.fillStyle="white";
+    ctx.fillText(a.val,a.x*tile+20,a.y*tile+20);
+  });
+
+  // Player (Robot Lucu)
+  if (!(invincible && blink)) {
+    let px = player.x * tile + 20;
+    let py = player.y * tile + 20;
+
+    // Badan
+    ctx.fillStyle = "#2196F3";
+    ctx.fillRect(px - 15, py - 15, 30, 30); 
+    
+    // Mata
+    ctx.fillStyle = "white";
+    ctx.fillRect(px - 10, py - 8, 6, 6);
+    ctx.fillRect(px + 4, py - 8, 6, 6);
+    
+    // Antena
+    ctx.strokeStyle = "#2196F3";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(px, py - 15);
+    ctx.lineTo(px, py - 22);
+    ctx.stroke();
+    ctx.fillStyle = "orange";
+    ctx.beginPath();
+    ctx.arc(px, py - 22, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Enemy
+  ctx.fillStyle="red";
+  ctx.beginPath();
+  ctx.arc(enemy.x*tile+20,enemy.y*tile+20,12,0,Math.PI*2);
+  ctx.fill();
 }
 
-// answers
-answers.forEach(a=>{
-ctx.fillStyle="green";
-ctx.fillRect(a.x*tile,a.y*tile,tile,tile);
-ctx.fillStyle="white";
-ctx.fillText(a.val,a.x*tile+5,a.y*tile+25);
-});
-
-// player
-ctx.fillStyle="blue";
-ctx.fillRect(player.x*tile+5,player.y*tile+5,tile-10,tile-10);
-}
-
+/* ===== GERAK ===== */
 function move(dx,dy){
-let nx = player.x + dx;
-let ny = player.y + dy;
+  let nx=player.x+dx;
+  let ny=player.y+dy;
+  if(nx<0||ny<0||nx>=10||ny>=10) return;
+  if(maze[ny][nx]===1) return;
 
-if(maze[ny][nx]===1) return;
+  player.x=nx;
+  player.y=ny;
+  hasMoved=true;
 
-player.x=nx;
-player.y=ny;
+  answers.forEach(a=>{
+    if(player.x===a.x && player.y===a.y){
+      selectedAnswer=a;
+      document.getElementById("confirmText").innerText="Pilih "+a.val+" ?";
+      document.getElementById("confirmBox").style.display="block";
+    }
+  });
 
-answers.forEach(a=>{
-if(player.x===a.x && player.y===a.y && !waitingConfirm){
-
-waitingConfirm = true;
-selectedAnswer = a;
-
-document.getElementById("confirmText").innerText =
-"Pilih jawaban ini: " + a.val + " ?";
-
-document.getElementById("confirmBox").style.display = "block";
-}
-});
-
-
-
-draw();
+  draw();
 }
 
-// keyboard control
+/* ===== KONFIRMASI ===== */
+function confirmYes(){
+  document.getElementById("confirmBox").style.display="none";
+  if(selectedAnswer.val===current.a){
+    score++; star++;
+    alert("Benar!");
+    if(star>=5){ level++; star=0; alert("Naik Level "+level+"!"); }
+  }else{
+    alert("Salah!");
+  }
+  updateUI();
+  newQuestion();
+}
+function confirmNo(){ document.getElementById("confirmBox").style.display="none"; }
+
+/* ===== UI ===== */
+function updateUI(){
+  document.getElementById("score").innerText=score;
+  document.getElementById("star").innerText=star;
+  document.getElementById("level").innerText=level;
+}
+
+/* ===== KEYBOARD ===== */
 document.addEventListener("keydown",e=>{
-if(e.key==="ArrowUp") move(0,-1);
-if(e.key==="ArrowDown") move(0,1);
-if(e.key==="ArrowLeft") move(-1,0);
-if(e.key==="ArrowRight") move(1,0);
+  if(e.key==="ArrowUp") move(0,-1);
+  if(e.key==="ArrowDown") move(0,1);
+  if(e.key==="ArrowLeft") move(-1,0);
+  if(e.key==="ArrowRight") move(1,0);
 });
-  function confirmYes(){
-
-document.getElementById("confirmBox").style.display = "none";
-waitingConfirm = false;
-
-if(selectedAnswer.val === current.a){
-score++;
-document.getElementById("score").innerText="Skor: "+score;
-alert("✅ Jawaban Benar!");
-newQuestion();
-}else{
-alert("❌ Jawaban Salah! Kembali ke awal.");
-player={x:1,y:1};
-draw();
-}
-
-selectedAnswer = null;
-}
-
-function confirmNo(){
-document.getElementById("confirmBox").style.display = "none";
-waitingConfirm = false;
-selectedAnswer = null;
-}
-
 
 newQuestion();
 </script>
-  
-
 </body>
 </html>

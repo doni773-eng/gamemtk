@@ -146,44 +146,78 @@ function randomTerm(){
 function randomOperator(){ let ops=["+","-","×"]; return ops[Math.floor(Math.random()*ops.length)]; }
 
 /* ===== GENERATE QUESTION ===== */
-function generateQuestion(){
-  let terms=[randomTerm(),randomTerm(),randomTerm(),randomTerm()];
-  let ops=[randomOperator(),randomOperator(),randomOperator()];
-  let expressionText=`${terms[0].text} ${ops[0]} ${terms[1].text} ${ops[1]} ${terms[2].text} ${ops[2]} ${terms[3].text}`;
-  document.getElementById("question").innerText = expressionText + " = ?";
+function generateQuestion() {
+    let res, txt, valid = false;
 
-  // HITUNG RESULT
-  let values = terms.map(t=>t.value);
-  let operators = [...ops];
-  for(let i=0;i<operators.length;i++){
-    if(operators[i]==="×"){
-      values[i] = values[i]*values[i+1];
-      values.splice(i+1,1);
-      operators.splice(i,1);
-      i--;
+    while (!valid) {
+        // Angka dasar awal yang kecil
+        let n1 = Math.floor(Math.random() * 10) + 5; 
+        
+        // Pilih skenario operasi campuran secara acak
+        let type = Math.floor(Math.random() * 3);
+        
+        if (type === 0) {
+            // Campuran: Persen + Perkalian + Pembagian
+            // Contoh: 50% x 10 : 5
+            let n2 = (Math.floor(Math.random() * 5) + 1) * 2; // angka genap
+            txt = `50% x ${n2} : 2`;
+            res = (0.5 * n2) / 2;
+        } 
+        else if (type === 1) {
+            // Campuran: Pembagian + Penjumlahan - Pengurangan
+            // Contoh: 12 : 3 + 5 - 2
+            let n2 = [2, 3, 4, 5][Math.floor(Math.random() * 4)];
+            let start = n2 * (Math.floor(Math.random() * 5) + 1);
+            let n3 = Math.floor(Math.random() * 5) + 1;
+            txt = `${start} : ${n2} + ${n3} - 1`;
+            res = (start / n2) + n3 - 1;
+        }
+        else {
+            // Campuran: Perkalian + Penjumlahan + Persen
+            // Contoh: 2 x 3 + 4 + 100%
+            let n2 = Math.floor(Math.random() * 4) + 1;
+            let n3 = Math.floor(Math.random() * 5) + 1;
+            txt = `${n2} x ${n3} + 2 + 100%`;
+            res = (n2 * n3) + 2 + 1; // 100% dari 1 adalah 1
+        }
+
+        // Validasi Akhir: Harus bulat, tidak minus, dan tidak nol
+        if (Number.isInteger(res) && res > 0 && res < 40) {
+            current = { q: txt + " = ?", a: res.toString() };
+            valid = true;
+        }
     }
-  }
-  let result = values[0];
-  for(let i=0;i<operators.length;i++){
-    if(operators[i]==="+") result+=values[i+1];
-    else result-=values[i+1];
-  }
-  result=parseFloat(result.toFixed(2));
 
-  current={q:expressionText+" = ?", a:result.toString()};
-
-  // POSISI JAWABAN
-  answers=[];
-  let correctPos=getRandomPath();
-  answers.push({x:correctPos.x,y:correctPos.y,val:current.a});
-  for(let i=0;i<3;i++){
-    let wrong;
-    do{ wrong=(result + (Math.random()*4-2)).toFixed(2); }while(wrong===current.a);
-    let pos=getRandomPath();
-    answers.push({x:pos.x,y:pos.y,val:wrong});
-  }
+    document.getElementById("question").innerText = current.q;
+    setupAnswers(current.a);
 }
 
+/* ===== SETUP PILIHAN JAWABAN ===== */
+function setupAnswers(correctVal) {
+    answers = []; // Kosongkan jawaban lama
+    
+    // 1. Masukkan Jawaban Benar
+    let posCorr = getRandomPath();
+    answers.push({ x: posCorr.x, y: posCorr.y, val: correctVal });
+
+    // 2. Masukkan 3 Jawaban Salah secara Acak
+    for (let i = 0; i < 3; i++) {
+        let pPos = getRandomPath();
+        
+        // Buat angka salah yang dekat dengan jawaban asli agar menantang
+        let offset = Math.floor(Math.random() * 5) + 1;
+        let wrong = Math.abs(parseInt(correctVal) + (Math.random() > 0.5 ? offset : -offset));
+
+        // Pastikan jawaban salah tidak sama dengan jawaban benar
+        if (wrong.toString() === correctVal || answers.some(a => a.x === pPos.x && a.y === pPos.y)) {
+            i--; // Ulangi jika posisi atau nilai tabrakan
+            continue;
+        }
+        
+        answers.push({ x: pPos.x, y: pPos.y, val: wrong.toString() });
+    }
+}
+  
 /* ===== RANDOM PATH ===== */
 function getRandomPath(){
   let x,y;
